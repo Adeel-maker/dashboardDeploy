@@ -99,42 +99,40 @@ def odyssey_values_for_insights(data):
     )
 
 
-
 def plot_histograms(product_name, platform_name):
     # Load and preprocess the data
     df = all_data
-    df = df[(df['Product'] == product_name)]
-    
+    df = df[df['Product'] == product_name]
+
     # Define metrics for each platform
     platform_metrics = {
         'youtube': ['clicks', 'views', 'daily_spend'],
         'meta': ['clicks', 'reach', 'daily_spend'],
-        'shopify': ['clicks', 'daily_spend', 'impressions'], 
+        'shopify': ['clicks', 'daily_spend', 'impressions'],
         'ppc': ['clicks', 'daily_spend', 'impressions'],
     }
 
     # Check if platform is recognized and select metrics
-    if platform_name in platform_metrics:
-        selected_metrics = platform_metrics[platform_name]
-    else:
-        st.error(f"Platform {platform_name} not recognised.")
+    if platform_name not in platform_metrics:
+        st.error(f"Platform {platform_name} not recognized.")
         return
+
+    selected_metrics = platform_metrics[platform_name]
 
     # Filter data by platform
     df_platform = df[df['Platform'] == platform_name]
-
-    # Convert 'Date' column to datetime format
-    df_platform['Date'] = pd.to_datetime(df_platform['Date'], format='%m/%d/%Y')
 
     # Ensure platform has data
     if df_platform.empty:
         st.error(f"No data available for platform {platform_name}.")
         return
 
+    # Convert 'Date' column to datetime format
+    df_platform['Date'] = pd.to_datetime(df_platform['Date'], format='%m/%d/%Y')
+
     # Filter metrics and summarize values
     df_filtered = df_platform[df_platform['Matrix'].isin(selected_metrics)]
     summary_df = df_filtered.groupby(['Date', 'Matrix'])['Values'].sum().reset_index()
-    
     # Pivot to make 'Date' rows and 'Matrix' columns
     summary_pivot = summary_df.pivot(index='Date', columns='Matrix', values='Values').fillna(0)
     summary_pivot.reset_index(inplace=True)
@@ -147,25 +145,23 @@ def plot_histograms(product_name, platform_name):
         'reach': '#F68C5B',
         'impressions': '#F68C5B'
     }
-    
+
     # Label mapping for metrics
     label_map = {
         'clicks': 'Clicks',
-        'views': 'Views (k)',
-        'daily_spend': 'Daily Spend (k)',
-        'reach': 'Reach (k)',
-        'impressions': 'Impressions (k)'
+        'views': 'Views ',
+        'daily_spend': 'Daily Spend',
+        'reach': 'Reach',
+        'impressions': 'Impressions'
     }
 
     # Reshape for plotting
+
     summary_melted = summary_pivot.melt(id_vars='Date', var_name='Metric', value_name='Value')
-    yt_value = summary_melted.loc[summary_melted['Metric'] == 'views', 'Value']
-# Apply logarithmic transformation to values
     if platform_name == 'youtube':
-        summary_melted.loc[summary_melted['Metric'] == 'views', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'views', 'Value'])
+        summary_melted.loc[summary_melted['Metric'] == 'views', 'Value'] = np.log((summary_melted.loc[summary_melted['Metric'] == 'views', 'Value'])) 
         summary_melted.loc[summary_melted['Metric'] == 'daily_spend', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'daily_spend', 'Value'])
         summary_melted.loc[summary_melted['Metric'] == 'clicks', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'clicks', 'Value'])
-        
 
     if platform_name == 'meta':
         summary_melted.loc[summary_melted['Metric'] == 'reach', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'reach', 'Value'])
@@ -177,27 +173,29 @@ def plot_histograms(product_name, platform_name):
         summary_melted.loc[summary_melted['Metric'] == 'impressions', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'impressions', 'Value'])
         summary_melted.loc[summary_melted['Metric'] == 'clicks', 'Value'] = np.log(summary_melted.loc[summary_melted['Metric'] == 'clicks', 'Value'])
 
-
     # Plot histogram
     fig = px.histogram(
-        summary_melted, 
-        x='Date', 
-        y='Value', 
-        color='Metric', 
-        barmode='group', 
+        summary_melted,
+        x='Date',
+        y='Value',
+        color='Metric',
+        barmode='group',
         height=300,
         width=800,
         color_discrete_map=color_discrete_map,
     )
     
-
-    # Set bar labels and positions
     for trace in fig.data:
-        trace.text = trace.y  
+        # Match each trace by the metric name and set text from summary_df
+        metric = trace.name
+        text_values = summary_df[summary_df['Matrix'] == metric]['Values'].astype(str)
+        # Make sure to align the lengths
+        if len(trace.y) == len(text_values):
+            trace.text = text_values  # Set text as values from summary_df
+            print(type(text_values))
+        
         trace.textposition = 'outside'  # Set text position for all traces
-        trace.textfont.size = 14  # Set font size for all traces        
-
-
+        trace.textfont.size = 20  # Set font size for all traces
     # Set y-axis range
     max_value = summary_melted['Value'].max()
     fig.update_yaxes(range=[0, max_value * 1.2])
@@ -207,11 +205,12 @@ def plot_histograms(product_name, platform_name):
         name=label_map.get(trace.name, trace.name),
         showlegend=True
     ))
-    
+
     # Customize x-axis date formatting
     unique_dates = df_platform['Date'].dt.to_period('D').astype('str').unique()
     formatted_dates = [pd.to_datetime(date).strftime('%d %B') for date in unique_dates]
 
+    # Update layout to remove horizontal grid lines
     fig.update_layout(
         xaxis=dict(
             tickvals=pd.to_datetime(unique_dates).to_pydatetime(),
@@ -227,19 +226,13 @@ def plot_histograms(product_name, platform_name):
         bargap=0.4,
         bargroupgap=0.3,
         yaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(255,255,255,0.1)',
-            gridwidth=1,
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
         ),
         xaxis_title=None,
         yaxis_title=None,
     )
-
-    # Border and opacity settings
-    fig.update_traces(marker=dict(
-        line=dict(width=5, color='rgba(0,0,0,0)'),
-        opacity=0.9
-    ))
 
     # Legend settings
     fig.update_layout(
@@ -257,8 +250,6 @@ def plot_histograms(product_name, platform_name):
     # Convert figure to HTML and return
     fig_html = fig.to_html(include_plotlyjs='cdn')
     return fig_html
-
-
 
 def zeniva_overview(df):
 
